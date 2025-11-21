@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ACR_NAME: ${{ secrets.ACR_NAME }} # e.g. oa2rrdktypnk6cosureg (no azurecr.io suffix)
+      REGISTRY_RAW: ${{ secrets.AZURE_CONTAINER_REGISTRY }} # can be either name or full login server
       IMAGE_NAME: my-app
 
     steps:
@@ -21,28 +21,26 @@ jobs:
           # Use A2A branch for the workflow code itself
           ref: main
 
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Resolve ACR login server
-        id: acr
+      - name: Derive registry login server
+        id: derive
         run: |
-          if [ -z "${{ env.ACR_NAME }}" ]; then echo "ACR_NAME secret not set" && exit 1; fi
-          LOGIN_SERVER=$(az acr show -n ${{ env.ACR_NAME }} --query loginServer -o tsv)
-          echo "LOGIN_SERVER=$LOGIN_SERVER" >> $GITHUB_ENV
-          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
-          echo "Resolved login server: $LOGIN_SERVER"
+          if [ -z "${{ env.REGISTRY_RAW }}" ]; then echo "AZURE_CONTAINER_REGISTRY secret not set" && exit 1; fi
+          RAW="${{ env.REGISTRY_RAW }}"
+          # Append suffix if user provided just the name
+          if [[ "$RAW" != *".azurecr.io" ]]; then RAW="$RAW.azurecr.io"; fi
+          echo "REGISTRY_SERVER=$RAW" >> $GITHUB_ENV
+          echo "server=$RAW" >> $GITHUB_OUTPUT
+          echo "Using registry server: $RAW"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: ACR login (Azure CLI)
-        run: |
-          if [ -z "${{ env.ACR_NAME }}" ]; then echo "ACR_NAME env missing" && exit 1; fi
-          az acr login -n ${{ env.ACR_NAME }}
-          echo "Logged into ACR: ${{ env.ACR_NAME }}"
+      - name: Docker login (username/password)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.derive.outputs.server }}
+          username: ${{ secrets.AZURE_CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_CONTAINER_REGISTRY_PASSWORD }}
 
       - name: Build and push Docker image (context = src/)
         uses: docker/build-push-action@v6
@@ -51,8 +49,8 @@ jobs:
           file: ./src/Dockerfile
           push: true
           tags: |
-            ${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_NAME }}:latest
-            ${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ steps.derive.outputs.server }}/${{ env.IMAGE_NAME }}:latest
+            ${{ steps.derive.outputs.server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           build-args: |
             ENV_FILE_CONTENT=${{ secrets.ENV }}
           secrets: |
