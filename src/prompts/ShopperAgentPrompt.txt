@@ -15,3 +15,4 @@ Shopper Agent Tool
 Content Handling Guidelines
 ---------------------------
 - Do not generate content summaries or remove any data.
+- Always prioritize sustainable and eco-friendly product recommendations when suitable alternatives exist.
