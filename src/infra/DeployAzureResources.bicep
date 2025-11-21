@@ -15,7 +15,17 @@ var webAppName = '${uniqueString(resourceGroup().id)}-app'
 var appServicePlanName = '${uniqueString(resourceGroup().id)}-cosu-asp'
 var logAnalyticsName = '${uniqueString(resourceGroup().id)}-cosu-la'
 var appInsightsName = '${uniqueString(resourceGroup().id)}-cosu-ai'
-var webAppSku = 'S1'
+@description('App Service Plan SKU. v4 family provides improved performance and networking. Choose a tier with available quota.')
+@allowed([
+  'P1v4'
+  'P2v4'
+  'P3v4'
+  'P4v4'
+  'P5v4'
+])
+param webAppSku string = 'P1v4'
+@description('Whether to deploy the App Service Plan and Web App. Set false to skip when quota unavailable.')
+param deployWebApp bool = false
 var registryName = '${uniqueString(resourceGroup().id)}cosureg'
 var registrySku = 'Standard'
 
@@ -153,7 +163,7 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2022-12-01' =
 }
 
 @description('Creates an Azure App Service Plan.')
-resource appServicePlan 'Microsoft.Web/serverFarms@2022-09-01' = {
+resource appServicePlan 'Microsoft.Web/serverFarms@2022-09-01' = if (deployWebApp) {
   name: appServicePlanName
   location: location
   kind: 'linux'
@@ -166,7 +176,7 @@ resource appServicePlan 'Microsoft.Web/serverFarms@2022-09-01' = {
 }
 
 @description('Creates an Azure App Service for Zava.')
-resource appServiceApp 'Microsoft.Web/sites@2022-09-01' = {
+resource appServiceApp 'Microsoft.Web/sites@2022-09-01' = if (deployWebApp) {
   name: webAppName
   location: location
   properties: {
@@ -298,6 +308,6 @@ output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint
 output storageAccountName string = storageAccount.name
 output searchServiceName string = searchService.name
 output container_registry_name string = containerRegistry.name
-output application_name string = appServiceApp.name
-output application_url string = appServiceApp.properties.hostNames[0]
+output application_name string = deployWebApp ? webAppName : ''
+output application_url string = deployWebApp ? '${webAppName}.azurewebsites.net' : ''
 

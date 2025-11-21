@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "image": {
+      "value": "oa2rrdktypnk6cosureg.azurecr.io/techworkshopl300/zava:latest"
+    },
+    "acrName": {
+      "value": "oa2rrdktypnk6cosureg"
+    },
+    "envVars": {
+      "value": [
+        {
+          "name": "COSMOS_ENDPOINT",
+          "value": "https://oa2rrdktypnk6-cosmosdb.documents.azure.com:443/"
+        },
+        {
+          "name": "SEARCH_SERVICE_NAME",
+          "value": "oa2rrdktypnk6-search"
+        }
+      ]
+    }
+  }
+}
