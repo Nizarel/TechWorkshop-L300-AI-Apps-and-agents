@@ -53,5 +53,8 @@ out/
 .azure-pipelines.yml
 *.azuredevops
 
-# Github
-.github/
+# GitHub
+# Allow workflows directory; previously ignored entire .github preventing CI config commit.
+# If you have sensitive files place them elsewhere; keep workflows versioned.
+!.github/
+!.github/workflows/
