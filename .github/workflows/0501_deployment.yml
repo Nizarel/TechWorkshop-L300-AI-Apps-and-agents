@@ -3,7 +3,7 @@ name: Build and Push Docker image to Azure Container Registry
 on:
   push:
     branches:
-      - A2A
+      - main
 
 jobs:
   build-and-push:
@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Use A2A branch for the workflow code itself
-          ref: A2A
+          ref: main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
