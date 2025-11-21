@@ -3,7 +3,7 @@ name: Deploy to Azure Container Registry
 on:
   push:
     branches:
-      - main
+      - A2A
     paths:
       - 'src/**'
   # Allows you to run this workflow manually from the Actions tab
