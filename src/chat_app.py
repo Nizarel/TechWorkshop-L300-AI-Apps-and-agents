@@ -338,9 +338,18 @@ validated_env_vars = validate_env_vars(env_vars)
 project_endpoint = os.environ.get("AZURE_AI_AGENT_ENDPOINT")
 if not project_endpoint:
     raise ValueError("AZURE_AI_AGENT_ENDPOINT environment variable is required")
+
+# Get tenant ID from environment or use default
+tenant_id = os.environ.get("AZURE_TENANT_ID", "16b3c013-d300-468d-ac64-7eda0820b6d3")
+
+# Set environment variable for Azure Identity to use the correct tenant
+os.environ["AZURE_TENANT_ID"] = tenant_id
+
 project_client = AIProjectClient(
     endpoint=project_endpoint,
-    credential=DefaultAzureCredential(),
+    credential=DefaultAzureCredential(
+        additionally_allowed_tenants=["*"]  # Allow cross-tenant authentication
+    ),
 )
 
 HANDOFF_PROMPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prompts', 'handoffPrompt.txt')
