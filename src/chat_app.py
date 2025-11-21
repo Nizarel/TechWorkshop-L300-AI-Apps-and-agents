@@ -8,6 +8,7 @@ from azure.ai.inference.models import SystemMessage, UserMessage
 from app.agents.agent_processor import AgentProcessor
 from azure.ai.inference import ChatCompletionsClient
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ClientAuthenticationError
 from collections import deque
 from typing import Deque, Tuple, Optional, Dict
 import orjson  # Faster JSON library
@@ -345,11 +346,25 @@ tenant_id = os.environ.get("AZURE_TENANT_ID", "16b3c013-d300-468d-ac64-7eda0820b
 # Set environment variable for Azure Identity to use the correct tenant
 os.environ["AZURE_TENANT_ID"] = tenant_id
 
+# Get managed identity client ID from environment (for Container Apps)
+managed_identity_client_id = os.environ.get("AZURE_CLIENT_ID")
+
+# Initialize credential with managed identity support
+if managed_identity_client_id:
+    # Running in Azure with user-assigned managed identity
+    credential = DefaultAzureCredential(
+        managed_identity_client_id=managed_identity_client_id,
+        additionally_allowed_tenants=["*"]
+    )
+else:
+    # Running locally with default credential chain
+    credential = DefaultAzureCredential(
+        additionally_allowed_tenants=["*"]
+    )
+
 project_client = AIProjectClient(
     endpoint=project_endpoint,
-    credential=DefaultAzureCredential(
-        additionally_allowed_tenants=["*"]  # Allow cross-tenant authentication
-    ),
+    credential=credential,
 )
 
 HANDOFF_PROMPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prompts', 'handoffPrompt.txt')
@@ -387,18 +402,35 @@ async def get():
     with open(chat_html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
+def _agents_permission_probe() -> bool:
+    """Return True if the current credential has agents read permissions, else False.
+    Does not raise on permission denied; raises on unexpected errors."""
+    try:
+        # list() to force evaluation; iterator may be lazy
+        _ = list(project_client.agents.list())
+        return True
+    except ClientAuthenticationError as e:
+        if "PermissionDenied" in str(e):
+            return False
+        raise
+    except Exception:
+        # Unexpected failure treated as no permission for health visibility
+        return False
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Azure Web App."""
+    """Health check endpoint for Azure Web App including Foundry agents permission probe."""
+    agents_permission = _agents_permission_probe()
     return {
-        "status": "healthy",
+        "status": "healthy" if agents_permission else "degraded",
         "timestamp": datetime.datetime.now().isoformat(),
         "environment_vars_configured": {
             "phi_4_endpoint": bool(validated_env_vars.get('phi_4_endpoint')),
             "phi_4_api_key": bool(validated_env_vars.get('phi_4_api_key')),
             "azure_openai_endpoint": bool(validated_env_vars.get('AZURE_OPENAI_ENDPOINT')),
             "azure_openai_key": bool(validated_env_vars.get('AZURE_OPENAI_KEY')),
-            "azure_ai_agent_endpoint": bool(os.environ.get("AZURE_AI_AGENT_ENDPOINT"))
+            "azure_ai_agent_endpoint": bool(os.environ.get("AZURE_AI_AGENT_ENDPOINT")),
+            "agents_permission": agents_permission
         }
     }
 
@@ -408,9 +440,33 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket Session Started")
     
     await websocket.accept()
-    thread = project_client.agents.threads.create()
+    try:
+        thread = project_client.agents.threads.create()
+    except ClientAuthenticationError as e:
+        # Surface clearer message to client & terminate session
+        msg = str(e)
+        if "PermissionDenied" in msg:
+            await websocket.send_text(fast_json_dumps({
+                "answer": "Authorization error: managed identity lacks Azure AI Foundry Agents permissions (agents/read). Assign 'Azure AI User' role at project or account scope and retry.",
+                "error": "PermissionDenied",
+                "cart": []
+            }))
+            await websocket.close()
+            return
+        else:
+            await websocket.send_text(fast_json_dumps({
+                "answer": "Authentication error while creating agent thread.",
+                "error": msg,
+                "cart": []
+            }))
+            await websocket.close()
+            return
     chat_history: Deque[Tuple[str, str]] = deque(maxlen=5)
-    customer_loyalty_thread = project_client.agents.threads.create()
+    try:
+        customer_loyalty_thread = project_client.agents.threads.create()
+    except ClientAuthenticationError:
+        # Reuse main thread if second thread cannot be created due to permissions
+        customer_loyalty_thread = thread
     
     # Flag to track if customer loyalty task has been executed
     customer_loyalty_executed = False
