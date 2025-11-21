@@ -51,7 +51,4 @@ jobs:
           tags: |
             ${{ steps.derive.outputs.server }}/${{ env.IMAGE_NAME }}:latest
             ${{ steps.derive.outputs.server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          build-args: |
-            ENV_FILE_CONTENT=${{ secrets.ENV }}
-          secrets: |
-            "env_file=${{ secrets.ENV }}"
+          # No build secrets or args baked in; runtime env vars supplied at deploy time.
