@@ -1,0 +1,48 @@
+name: Build and Push Docker image to Azure Container Registry
+
+on:
+  push:
+    branches:
+      - A2A
+
+jobs:
+  build-and-push:
+    name: Build and push image to ACR
+    runs-on: ubuntu-latest
+
+    env:
+      REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+      IMAGE_NAME: my-app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use A2A branch for the workflow code itself
+          ref: A2A
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.AZURE_CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_CONTAINER_REGISTRY_PASSWORD }}
+
+      - name: Build and push Docker image (context = src/)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          file: ./src/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          # Pass ENV secret as a build arg only if your Dockerfile needs it at build time.
+          # If you only need .env at runtime, you can remove these two lines.
+          build-args: |
+            ENV_FILE_CONTENT=${{ secrets.ENV }}
+          secrets: |
+            "env_file=${{ secrets.ENV }}"
